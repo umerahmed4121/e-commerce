@@ -1,0 +1,331 @@
+To add new field in payload predefined globals(for eg footer):
+
+1) Go to src\app\_graphql\globals.ts
+____________________________________________________
+export const FOOTER = `
+  Footer {
+    copyright    <-------- Add here the new field
+    navItems {
+      link ${LINK_FIELDS({ disableAppearance: true })}
+		}
+  }
+`
+____________________________________________________
+
+2) Go to src\payload\globals\Footer.ts
+
+____________________________________________________
+
+ fields: [
+    {                       <--------
+      name: "copyright",                |
+      label: "Copyright",               |
+      type: "text",                     |
+      required: true,                   |
+    },                      <----------
+    {
+      name: 'navItems',
+      type: 'array',
+      maxRows: 6,
+      fields: [
+        link({
+          appearances: false,
+        }),
+      ],
+    },
+  ],
+
+____________________________________________________
+
+3) Go to  src\payload\payload-types.ts
+
+____________________________________________________
+
+export interface Footer {
+  id: string;
+  copyright: string; <-----
+  navItems?:
+    | {
+        link: {
+          type?: ('reference' | 'custom') | null;
+          newTab?: boolean | null;
+          icon?: string | Media | null;
+          reference?: {
+            relationTo: 'pages';
+            value: string | Page;
+          } | null;
+          url?: string | null;
+          label: string;
+        };
+        id?: string | null;
+      }[]
+    | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+
+____________________________________________________
+
+
+4) Stop the app and run following command:
+
+yarn payload generate:graphQLSchema
+yarn generate:types
+
+
+To add icon in navItems in Footer:
+
+1) Goto src\app\_graphql\link.ts
+
+____________________________________________________
+
+type
+  newTab
+  url
+  icon{       <----
+    url           |
+  }           <----
+____________________________________________________
+
+2) Goto src\payload\fields\link.ts
+
+____________________________________________________
+
+{
+            name: 'newTab',
+            label: 'Open in new tab',
+            type: 'checkbox',
+            admin: {
+              width: '50%',
+              style: {
+                alignSelf: 'flex-end',
+              },
+            },
+          },
+          {                   <---------
+            name: 'icon',               |
+            label: 'Icon',              |
+            type: 'upload',             |                                   
+            relationTo: 'media',        |
+          },                  <----------
+        ],
+
+____________________________________________________
+
+3) Stop the app and run following command:
+
+yarn payload generate:graphQLSchema
+yarn generate:types
+
+
+____________________________________________________
+
+To add custom hero
+
+1) create new folder CustomHero in src\app\_heros
+2) In src\app\_components\Hero\index.tsx add custom hero to heros array like that
+
+const heroes = {
+  highImpact: HighImpactHero,
+  mediumImpact: MediumImpactHero,
+  lowImpact: LowImpactHero,
+  customHero: CustomHero, <------------
+}
+
+3) In src\payload\fields\hero.ts append the custom hero field
+
+        {
+          label: 'Low Impact',
+          value: 'lowImpact',
+        },
+        {                           <----
+          label: 'Custom Hero',         |
+          value: 'customHero',          |
+        },                          <----
+
+also change the condition like
+
+admin: {
+        condition: (_, { type } = {}) => ['highImpact', 'mediumImpact', 'customHero'].includes(type),
+      },
+
+
+4) Reload graphQL commands
+
+yarn payload generate:graphQLSchema
+yarn generate:types
+
+5) Reload application
+
+ctrl+c
+npm run dev
+
+____________________________________________________
+
+To add images to categories
+
+1) Add media in category interface in src\payload\payload-types.ts
+
+export interface Category {
+  id: string;
+  title?: string | null;
+  media?: string | Media | null;
+  parent?: (string | null) | Category;
+  breadcrumbs?:
+    | {
+        doc?: (string | null) | Category;
+        url?: string | null;
+        label?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  updatedAt: string;
+  createdAt: string;
+}
+
+2) Goto src\payload\collections\Categories.ts and append the media field
+
+fields: [
+    {
+      name: 'title',
+      type: 'text',
+      required: true,
+    },
+    {
+      name: 'media',
+      type: 'upload',
+      relationTo: 'media',
+    },
+
+]
+
+
+
+
+3) Fetch categories from src\app\_api\fetchDocs.ts by appending in queryMap
+
+const queryMap = {
+  pages: {
+    query: PAGES,
+    key: 'Pages',
+  },
+  products: {
+    query: PRODUCTS,
+    key: 'Products',
+  },
+  orders: {
+    query: ORDERS,
+    key: 'Orders',
+  },
+  categories: {
+    query: CATEGORIES,
+    key: 'Categories',
+  },
+}
+
+
+4) Go to src\app\_graphql\categories.ts and update it 
+
+export const PRODUCT_CATEGORIES = `categories {
+  title
+  id
+  breadcrumbs {
+    id
+    label
+  }
+}`
+
+export const CATEGORIES = `
+query {
+  Categories(limit: 300) {
+    docs {
+      id
+      title
+      media {
+        alt
+        width
+        height
+        url
+      }
+    }
+  }
+}      
+          `
+
+5) Update src\app\_graphql\blocks.ts by changing CATEGORIES to PRODUCT_CATEGORIES
+
+export const ARCHIVE_BLOCK = `
+...on Archive {
+  blockType
+  introContent
+  populateBy
+  relationTo
+  ${PRODUCT_CATEGORIES}
+  limit
+  selectedDocs {
+    relationTo
+    value {
+      ...on Product {
+        id
+        slug
+        title
+        priceJSON
+        ${META}
+      }
+    }
+  }
+  populatedDocs {
+    relationTo
+    value {
+      ...on Product {
+        id
+        slug
+        title
+        priceJSON
+        ${PRODUCT_CATEGORIES}
+        ${META}
+      }
+    }
+  }
+  populatedDocsTotal
+}
+`
+6) go to src\app\_graphql\products.ts and replace CATEGORIES with PRODUCT_CATEGORIES
+
+export const PRODUCT = `
+  query Product($slug: String, $draft: Boolean) {
+    Products(where: { slug: { equals: $slug}}, limit: 1, draft: $draft) {
+      docs {
+        id
+        title
+        stripeProductID
+        ${PRODUCT_CATEGORIES}
+        layout {
+          ${CALL_TO_ACTION}
+          ${CONTENT}
+          ${MEDIA_BLOCK}
+          ${ARCHIVE_BLOCK}
+        }
+        priceJSON
+        enablePaywall
+        relatedProducts {
+          id
+          slug
+          title
+          ${META}
+        }
+        ${META}
+      }
+    }
+  }
+`
+
+7) Reload graphQL commands
+
+yarn payload generate:graphQLSchema
+yarn generate:types
+
+8) Reload application
+
+ctrl+c
+npm run dev
